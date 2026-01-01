@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access KYC Form - Kisaan InfoTech Limited</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f4f8;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        .logo {
+            height: 80px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #2c5282;
+            margin-bottom: 10px;
+        }
+        p {
+            margin-bottom: 30px;
+            color: #555;
+            line-height: 1.6;
+        }
+        input[type="email"] {
+            width: 100%;
+            padding: 12px 15px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #2c5282;
+            color: white;
+            padding: 12px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background: #1e3a5f;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 30px;
+            font-size: 14px;
+            color: #856404;
+        }
+        .status {
+            margin-top: 20px;
+            font-weight: bold;
+            color: #d32f2f;
+        }
+    </style>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <div class="login-container">
+        <img src="https://kisaaninfotech.com/Images/KisaanInfotech.svg" alt="Kisaan Infotech Logo" class="logo">
+        <h1>Private Convertible Notes Investment</h1>
+        <p>This is a private placement offer under Section 42 of the Companies Act, 2013.<br>
+           Access is restricted to pre-verified investors only.</p>
+        
+        <label for="email">Enter your registered email address:</label>
+        <input type="email" id="email" placeholder="yourname@example.com" required>
+        
+        <button onclick="sendMagicLink()">Send Access Link</button>
+        
+        <div id="status" class="status"></div>
+        
+        <div class="warning">
+            <strong>Important:</strong> You will receive a secure magic link via email if your email is pre-approved.
+            The link is valid for 30 minutes and can be used only once.
+        </div>
+    </div>
+
+    <script>
+        // === Paste your Firebase config here ===
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-Ohk7D5BRrBggRvG1pfXPRt7L13Q5b4k",
+            authDomain: "kisaankyc.firebaseapp.com",
+            projectId: "kisaankyc",
+            storageBucket: "kisaankyc.firebasestorage.app",
+            messagingSenderId: "424646466516",
+            appId: "1:424646466516:web:d32b6c25d486945d13d441",
+			measurementId: "G-HHQWZDHXMB"
+        };
+        // =======================================
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        async function sendMagicLink() {
+            const email = document.getElementById('email').value.trim();
+            const statusEl = document.getElementById('status');
+
+            if (!email) {
+                statusEl.textContent = "Please enter a valid email address.";
+                return;
+            }
+
+            statusEl.textContent = "Checking eligibility...";
+
+            try {
+                // Check if email is in verified_investors collection
+                const snapshot = await db.collection('verified_investors')
+                    .where('email', '==', email.toLowerCase())
+                    .limit(1)
+                    .get();
+
+                if (snapshot.empty) {
+                    statusEl.textContent = "This email is not pre-approved for this private placement. Please contact info@kisaaninfotech.com.";
+                    return;
+                }
+
+                // Check current FY offer count (to help stay under 200)
+                const today = new Date();
+                const fy = (today.getMonth() + 1 >= 4) ? 
+                    `${today.getFullYear()}-${today.getFullYear() + 1}` : 
+                    `${today.getFullYear() - 1}-${today.getFullYear()}`;
+
+                const logSnapshot = await db.collection('access_logs')
+                    .where('fy', '==', fy)
+                    .get();
+
+                if (logSnapshot.size >= 199) {  // Alert near limit
+                    statusEl.textContent = "Maximum number of offers reached for this financial year. Contact the company for details.";
+                    return;
+                }
+
+                // Send magic link
+                const actionCodeSettings = {
+                    url: window.location.origin + '/kyc_form.html',  // Change to your actual form filename
+                    handleCodeInApp: true
+                };
+
+                await auth.sendSignInLinkToEmail(email, actionCodeSettings);
+                window.localStorage.setItem('emailForSignIn', email);
+
+                statusEl.style.color = '#2e7d32';
+                statusEl.textContent = "Success! Magic link sent to your email. Check your inbox (and spam folder).";
+
+            } catch (error) {
+                console.error(error);
+                statusEl.textContent = "Error: " + error.message;
+            }
+        }
+
+        // Optional: Handle if user came back via magic link (rare for index page)
+        if (auth.isSignInWithEmailLink(window.location.href)) {
+            let email = window.localStorage.getItem('emailForSignIn');
+            if (!email) email = window.prompt('Confirm your email:');
+            if (email) {
+                auth.signInWithEmailLink(email, window.location.href)
+                    .then(() => window.location = 'kyc_form.html')
+                    .catch(err => alert(err.message));
+            }
+        }
+    </script>
+</body>
+</html>
